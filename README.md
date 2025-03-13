@@ -83,10 +83,3 @@ La aplicación estará disponible en `http://localhost:8080`
 - Validación de cuentas activas
 - Protección contra operaciones inválidas
 
-## Contribución
-
-1. Fork el proyecto
-2. Crea tu rama de características (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
