@@ -5,8 +5,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -18,189 +18,175 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+import finalCDT.finalCDT.dto.UserDTO;
+import finalCDT.finalCDT.dto.UserResponseDTO;
+import finalCDT.finalCDT.entitys.Account;
+import finalCDT.finalCDT.entitys.Cdt;
+import finalCDT.finalCDT.entitys.TarjetaCredito;
+import finalCDT.finalCDT.entitys.Transfer;
 import finalCDT.finalCDT.helpers.ApiResponse;
-import finalCDT.finalCDT.models.Account;
-import finalCDT.finalCDT.models.Cdt;
-import finalCDT.finalCDT.models.TarjetaCredito;
-import finalCDT.finalCDT.models.Transfer;
-import finalCDT.finalCDT.models.User;
+import finalCDT.finalCDT.services.UserService;
+import jakarta.validation.Valid;
 
 @RestController
 @CrossOrigin(origins = "*")
 public class Controllers {
 
+    @Autowired
+    private UserService userService;
+
     List<Account> accounts = new ArrayList<>();
     List<Transfer> transfers = new ArrayList<>();
-    List<User> users = new ArrayList<>();
     List<Cdt> cdts = new ArrayList<>();
     List<TarjetaCredito> tarjetasCreditos = new ArrayList<>();
 
-    public <T, K> Map<String, Object> setApiResponse(ApiResponse<T, K> data) {
+    private <T> Map<String, Object> setApiResponse(ApiResponse<T> apiResponse) {
         Map<String, Object> response = new HashMap<>();
-        response.put("ok", data.isOk());
-        response.put("data", data.getData());
-        response.put("message", data.getMessage());
+        response.put("ok", apiResponse.isOk());
+        response.put("data", apiResponse.getData());
+        response.put("message", apiResponse.getMessage());
         return response;
     }
 
-    @PostMapping("/user")
-    public ResponseEntity<?> postUsers(@RequestBody User user) {
-        Map<String, Object> response = new HashMap<>();
-
-        if (user.getCc().equals(null) || user.getCc().isEmpty() || user.getEmail().equals(null)
-                || user.getEmail().isEmpty() || user.getLastname().equals(null) || user.getLastname().isEmpty()
-                || user.getName().equals(null) || user.getName().isEmpty()) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Todos los campos son obligatorios"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    @PostMapping("/users")
+    public ResponseEntity<?> createUser(@Valid @RequestBody UserDTO userDTO) {
+        // Validar campos obligatorios
+        if (userDTO.getCc() == null || userDTO.getCc().trim().isEmpty() ||
+            userDTO.getEmail() == null || userDTO.getEmail().trim().isEmpty() ||
+            userDTO.getLastname() == null || userDTO.getLastname().trim().isEmpty() ||
+            userDTO.getName() == null || userDTO.getName().trim().isEmpty()) {
+            
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Todos los campos son obligatorios")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        User ccDuplicada = users.stream().filter(item -> item.getCc().equals(user.getCc())).findAny().orElse(null);
-
-        if (ccDuplicada != null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "La cc ya esxiste"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        // Validar duplicados
+        if (userService.getUserByCc(userDTO.getCc()) != null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "La cc ya existe")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        User emailDuplicado = users.stream().filter(item -> item.getEmail().equals(user.getEmail())).findAny()
-                .orElse(null);
-
-        if (emailDuplicado != null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "El email ya existe"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        if (userService.getUserByEmail(userDTO.getEmail()) != null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "El email ya existe")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        users.add(user);
-        response = setApiResponse(new ApiResponse<>(true, users, "Usuario guardado"));
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        // Crear usuario
+        UserResponseDTO savedUser = userService.createUser(userDTO);
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, savedUser, "Usuario guardado")), 
+            HttpStatus.CREATED
+        );
     }
 
-    @GetMapping("/user")
+    @GetMapping("/users")
     public ResponseEntity<?> usersActivated() {
-        Map<String, Object> response = new HashMap<>();
-
-        List<User> usersActivate = users.stream().filter(item -> item.getIsActivated().equals(true))
-                .collect(Collectors.toList());
-
-        response = setApiResponse(new ApiResponse<>(true, usersActivate, "Lista de usuarios activos"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, userService.getAllActiveUsers(), "Lista de usuarios activos")), 
+            HttpStatus.OK
+        );
     }
 
-    @GetMapping("/user/{id}")
-    public ResponseEntity<?> userId(@RequestBody User user, @PathVariable UUID id) {
-        Map<String, Object> response = new HashMap<>();
-
-        User userEncontrado = users.stream()
-                .filter(item -> item.getId().equals(id) && item.getIsActivated().equals(true)).findAny().orElse(null);
-
-        if (userEncontrado == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontro el usuario"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+    @GetMapping("/users/{id}")
+    public ResponseEntity<?> userId(@PathVariable UUID id) {
+        try {
+            UserResponseDTO userEncontrado = userService.getUserById(id);
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(true, userEncontrado, "Usuario encontrado")), 
+                HttpStatus.OK
+            );
+        } catch (Exception e) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se encontró el usuario")), 
+                HttpStatus.NOT_FOUND
+            );
         }
-
-        response = setApiResponse(new ApiResponse<>(true, userEncontrado, "Usuario encontrado"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
-    @GetMapping("/user/allusers")
+    @GetMapping("/users/allusers")
     public ResponseEntity<?> listarUsuarios() {
-        Map<String, Object> response = new HashMap<>();
-
-        response = setApiResponse(new ApiResponse<>(true, users, "Esta es la lista de usuarios"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, userService.getAllUsers(), "Esta es la lista de usuarios")), 
+            HttpStatus.OK
+        );
     }
 
-    @PutMapping("/user/{id}")
-    public ResponseEntity<?> putUser(@RequestBody User user, @PathVariable UUID id) {
-        Map<String, Object> response = new HashMap<>();
-
-        User userEncontrado = users.stream().filter(item -> item.getId().equals(id)).findAny().orElse(null);
-
-        if (userEncontrado == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Usuario no encontrado"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+    @PutMapping("/users/{id}")
+    public ResponseEntity<?> putUser(@PathVariable UUID id, @Valid @RequestBody UserDTO userDTO) {
+        // Validar campos obligatorios
+        if (userDTO.getCc() == null || userDTO.getCc().trim().isEmpty() ||
+            userDTO.getEmail() == null || userDTO.getEmail().trim().isEmpty() ||
+            userDTO.getLastname() == null || userDTO.getLastname().trim().isEmpty() ||
+            userDTO.getName() == null || userDTO.getName().trim().isEmpty()) {
+            
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Los campos son obligatorios para actualizar")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        if (user.getCc().equals(null) || user.getCc().isEmpty() || user.getEmail().equals(null)
-                || user.getEmail().isEmpty() || user.getLastname().equals(null) || user.getLastname().isEmpty()
-                || user.getName().equals(null) || user.getName().isEmpty()) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Los campos son obligatorios para actualizar"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        try {
+            UserResponseDTO updatedUser = userService.updateUser(id, userDTO);
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(true, updatedUser, "Usuario actualizado")), 
+                HttpStatus.OK
+            );
+        } catch (Exception e) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, e.getMessage())), 
+                HttpStatus.BAD_REQUEST
+            );
         }
-
-        if (!userEncontrado.getCc().equals(user.getCc())) {
-            User ccDuplicado = users.stream()
-                    .filter(p -> p.getCc().equals(user.getCc())).findAny().orElse(null);
-
-            if (ccDuplicado != null) {
-                response = setApiResponse(new ApiResponse<>(false, "", "La cc ya existe"));
-                return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-            }
-        }
-
-        if (!userEncontrado.getEmail().equals(user.getEmail())) {
-            User emailDuplicado = users.stream()
-                    .filter(p -> p.getCc().equals(user.getEmail())).findAny().orElse(null);
-
-            if (emailDuplicado != null) {
-                response = setApiResponse(new ApiResponse<>(false, "", "El email ya existe"));
-                return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-            }
-        }
-
-        userEncontrado.setCc(user.getCc());
-        userEncontrado.setEmail(user.getEmail());
-        userEncontrado.setLastname(user.getLastname());
-        userEncontrado.setName(user.getName());
-
-        response = setApiResponse(new ApiResponse<>(true, "", "Usuario actualizado"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
-    @DeleteMapping("/user/{id}")
+    @DeleteMapping("/users/{id}")
     public ResponseEntity<?> eliminarUsuario(@PathVariable UUID id) {
-        Map<String, Object> response = new HashMap<>();
-
-        User userEncontrado = users.stream()
-                .filter(item -> item.getId().equals(id) && item.getIsActivated().equals(true)).findAny().orElse(null);
-
-        if (userEncontrado == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Usuario no encontrado"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+        try {
+            userService.deactivateUser(id);
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(true, null, "Usuario desactivado")), 
+                HttpStatus.OK
+            );
+        } catch (Exception e) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, e.getMessage())), 
+                HttpStatus.NOT_FOUND
+            );
         }
-
-        userEncontrado.setIsActivated(false);
-        response = setApiResponse(new ApiResponse<>(true, "", "Usuario desactivado"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
     /// ACCOUNT ///
 
     @PostMapping("/accounts")
     public ResponseEntity<?> postAccount(@RequestBody Account cuenta) {
-        Map<String, Object> response = new HashMap<>();
-
-        if (cuenta.getBalance() == 0 || cuenta.getNumber().equals(null) || cuenta.getNumber().isEmpty()
-                || cuenta.getType().equals(null) || cuenta.getType().isEmpty() || cuenta.getIdUser().equals(null)) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Todos los datos son obligatorios"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        if (cuenta.getBalance() <= 0 || cuenta.getNumber() == null || cuenta.getNumber().trim().isEmpty() ||
+            cuenta.getType() == null || cuenta.getType().trim().isEmpty() || cuenta.getIdUser() == null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Todos los datos son obligatorios")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        Account numeroRepetido = accounts.stream().filter(item -> item.getNumber().equals(cuenta.getNumber())).findAny()
-                .orElse(null);
-
-        if (numeroRepetido != null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "El numero de cuenta ya existe"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-        }
-
-        if (!cuenta.getType().equals("ahorro") && !cuenta.getType().equals("corriente")) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Solo se puede ahorro o corriente"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        // Validar que el tipo sea válido
+        String tipo = cuenta.getType().toLowerCase().trim();
+        if (!tipo.equals("ahorro") && !tipo.equals("corriente")) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Solo se puede ahorro o corriente")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
         accounts.add(cuenta);
-        response = setApiResponse(new ApiResponse<>(false, accounts, "Cuenta bancaria creada"));
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, accounts, "Cuenta bancaria creada")), 
+            HttpStatus.CREATED
+        );
     }
 
     @GetMapping("/accounts/activas")
@@ -211,7 +197,7 @@ public class Controllers {
                 .orElse(null);
 
         if (cuentasActivadas == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontraron cuentas activas"));
+            response = setApiResponse(new ApiResponse<>(false, null, "No se encontraron cuentas activas"));
             return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
         }
 
@@ -227,7 +213,7 @@ public class Controllers {
                 .filter(item -> item.getId().equals(id) && item.getIsActivated().equals(true)).findAny().orElse(null);
 
         if (cuentaEncontrada == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontro la cuenta"));
+            response = setApiResponse(new ApiResponse<>(false, null, "No se encontró la cuenta"));
             return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
         }
 
@@ -244,70 +230,88 @@ public class Controllers {
     }
 
     @PutMapping("/accounts/{id}")
-    public ResponseEntity<?> putCuenta(@PathVariable UUID id, @RequestBody Account cuenta) {
-        Map<String, Object> response = new HashMap<>();
-
-        Account cuentaEcnontrada = accounts.stream().filter(item -> item.getId().equals(id)).findAny().orElse(null);
-
-        if (cuentaEcnontrada == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontro la cuenta"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
-        }
-
-        if (cuenta.getBalance() == 0 || cuenta.getNumber().equals(null) || cuenta.getNumber().isEmpty()
-                || cuenta.getType().equals(null) || cuenta.getType().isEmpty()) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Todos los datos son obligatorios"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-        }
-
-        if (!cuentaEcnontrada.getNumber().equals(cuenta.getNumber())) {
-            Account cambioNumber = accounts.stream()
-                    .filter(item -> item.getNumber().equals(cuenta.getNumber())).findAny().orElse(null);
-
-            if (cambioNumber != null) {
-                response = setApiResponse(new ApiResponse<>(false, "", "No se puede cambiar el numero de cuenta"));
-                return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<?> putAccount(@PathVariable UUID id, @RequestBody Account cuenta) {
+        Account cuentaEncontrada = null;
+        for (Account acc : accounts) {
+            if (acc.getId().equals(id)) {
+                cuentaEncontrada = acc;
+                break;
             }
         }
 
-        if (!cuentaEcnontrada.getIdUser().equals(cuenta.getIdUser())) {
-            Account cambioIdUser = accounts.stream()
-                    .filter(item -> item.getIdUser().equals(cuenta.getIdUser())).findAny().orElse(null);
-
-            if (cambioIdUser != null) {
-                response = setApiResponse(new ApiResponse<>(false, "", "El id de usuario es diferente"));
-                return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-            }
+        if (cuentaEncontrada == null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se encontró la cuenta")), 
+                HttpStatus.NOT_FOUND
+            );
         }
 
-        if (!cuenta.getType().equals("ahorro") && !cuenta.getType().equals("corriente")) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Solo se puede ahorro o corriente"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        if (cuenta.getBalance() <= 0 || cuenta.getNumber() == null || cuenta.getNumber().trim().isEmpty() ||
+            cuenta.getType() == null || cuenta.getType().trim().isEmpty()) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Todos los datos son obligatorios")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        cuentaEcnontrada.setBalance(cuenta.getBalance());
-        cuentaEcnontrada.setNumber(cuenta.getNumber());
-        cuentaEcnontrada.setType(cuenta.getType());
+        // Validar que no se cambie el número de cuenta
+        if (!cuentaEncontrada.getNumber().equals(cuenta.getNumber())) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se puede cambiar el número de cuenta")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
 
-        response = setApiResponse(new ApiResponse<>(false, "", "Cuenta actualizada"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        // Validar que no se cambie el ID del usuario
+        if (!cuentaEncontrada.getIdUser().equals(cuenta.getIdUser())) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se puede cambiar el id del usuario")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
 
+        // Validar que el tipo sea válido
+        String tipo = cuenta.getType().toLowerCase().trim();
+        if (!tipo.equals("ahorro") && !tipo.equals("corriente")) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Solo se puede ahorro o corriente")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
+
+        cuentaEncontrada.setBalance(cuenta.getBalance());
+        cuentaEncontrada.setType(cuenta.getType());
+        
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, null, "Cuenta actualizada")), 
+            HttpStatus.OK
+        );
     }
 
     @DeleteMapping("/accounts/{id}")
-    public ResponseEntity<?> desactivarCuenta(@PathVariable UUID id) {
-        Map<String, Object> response = new HashMap<>();
-
-        Account cuentaEncontrada = accounts.stream().filter(item -> item.getId().equals(id)).findAny().orElse(null);
-
-        if (cuentaEncontrada == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontro la cuenta bancaria"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+    public ResponseEntity<?> deleteAccount(@PathVariable UUID id) {
+        Account cuentaEncontrada = null;
+        for (Account acc : accounts) {
+            if (acc.getId().equals(id)) {
+                cuentaEncontrada = acc;
+                break;
+            }
         }
 
+        if (cuentaEncontrada == null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se encontró la cuenta")), 
+                HttpStatus.NOT_FOUND
+            );
+        }
+
+        // Desactivar la cuenta en lugar de eliminarla
         cuentaEncontrada.setIsActivated(false);
-        response = setApiResponse(new ApiResponse<>(true, "", "Cuenta desactivada"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, null, "Cuenta desactivada exitosamente")), 
+            HttpStatus.OK
+        );
     }
 
     /// TRANSFERENCIAS ///
@@ -328,13 +332,100 @@ public class Controllers {
                 .orElse(null);
 
         if (transferenciaEncontrada == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontro la transferencia"));
+            response = setApiResponse(new ApiResponse<>(false, null, "No se encontró la transferencia"));
             return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
 
         }
 
         response = setApiResponse(new ApiResponse<>(true, transferenciaEncontrada, "Transferencia encontrada"));
         return new ResponseEntity<>(response, HttpStatus.OK);
+    }
+
+    @PostMapping("/transfer")
+    public ResponseEntity<?> realizarTransferencia(@RequestBody Transfer transfer) {
+        try {
+            // Validar monto de transferencia
+            if (transfer.getAmount() <= 0) {
+                return new ResponseEntity<>(
+                    setApiResponse(new ApiResponse<>(false, null, "El monto de la transferencia debe ser mayor a 0")), 
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            // Validar que las cuentas sean diferentes
+            if (transfer.getOriginAccount() == 0 || transfer.getDestinationAccount() == 0) {
+                return new ResponseEntity<>(
+                    setApiResponse(new ApiResponse<>(false, null, "Las cuentas de origen y destino son requeridas")), 
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            if (transfer.getOriginAccount() == transfer.getDestinationAccount()) {
+                return new ResponseEntity<>(
+                    setApiResponse(new ApiResponse<>(false, null, "La cuenta de origen y destino no pueden ser la misma")), 
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            // Buscar cuenta de origen
+            Account originAccount = null;
+            for (Account acc : accounts) {
+                if (acc.getId() != null && acc.getId().equals(transfer.getOriginAccount()) && acc.getIsActivated()) {
+                    originAccount = acc;
+                    break;
+                }
+            }
+
+            if (originAccount == null) {
+                return new ResponseEntity<>(
+                    setApiResponse(new ApiResponse<>(false, null, "Cuenta bancaria de origen no encontrada o inactiva")), 
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            // Buscar cuenta de destino
+            Account destinationAccount = null;
+            for (Account acc : accounts) {
+                if (acc.getId() != null && acc.getId().equals(transfer.getDestinationAccount()) && acc.getIsActivated()) {
+                    destinationAccount = acc;
+                    break;
+                }
+            }
+
+            if (destinationAccount == null) {
+                return new ResponseEntity<>(
+                    setApiResponse(new ApiResponse<>(false, null, "Cuenta bancaria de destino no encontrada o inactiva")), 
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            // Validar saldo suficiente
+            if (originAccount.getBalance() < transfer.getAmount()) {
+                return new ResponseEntity<>(
+                    setApiResponse(new ApiResponse<>(false, null, 
+                        String.format("Saldo insuficiente. Saldo actual: %.2f, Monto a transferir: %.2f", 
+                            originAccount.getBalance(), transfer.getAmount()))), 
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            // Realizar transferencia
+            originAccount.setBalance(originAccount.getBalance() - transfer.getAmount());
+            destinationAccount.setBalance(destinationAccount.getBalance() + transfer.getAmount());
+            transfers.add(transfer);
+
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(true, transfer, 
+                    String.format("Transferencia exitosa. Nuevo saldo: %.2f", originAccount.getBalance()))), 
+                HttpStatus.OK
+            );
+
+        } catch (Exception e) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Error al procesar la transferencia: " + e.getMessage())), 
+                HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
 
     /// CDT ///
@@ -353,7 +444,7 @@ public class Controllers {
         Cdt cdtEncontrado = cdts.stream().filter(item -> item.getId().equals(id)).findAny().orElse(null);
 
         if (cdtEncontrado == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Cdt no encontrado"));
+            response = setApiResponse(new ApiResponse<>(false, null, "Cdt no encontrado"));
             return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
         }
 
@@ -362,66 +453,113 @@ public class Controllers {
     }
 
     @PostMapping("/cdt")
-    public ResponseEntity<?> postCdt(@RequestBody Cdt cdt) {
-        Map<String, Object> response = new HashMap<>();
-
-        if (cdt.getPlazoMeses() == 0 || cdt.getIdUser().equals(null) || cdt.getMonto() == 0) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Todos los campos son obligatorios"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    public ResponseEntity<?> crearCdt(@RequestBody Cdt cdt) {
+        if (cdt.getMonto() <= 0 || cdt.getPlazoMeses() <= 0 || 
+            cdt.getIdUser() == 0) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Todos los datos son obligatorios y deben ser valores positivos")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        if (cdt.getPlazoMeses() != 3 && cdt.getPlazoMeses() != 6 && cdt.getPlazoMeses() != 9
-                && cdt.getPlazoMeses() != 12) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Solo se pueden plazos de 3, 6, 9 y 12 meses"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-        }
-
-        cdts.add(cdt);
-        response = setApiResponse(new ApiResponse<>(true, cdts, "Cdt guardado"));
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
-    }
-
-    @PutMapping("/cdt/{id}")
-    public ResponseEntity<?> putCdt(@PathVariable UUID id, @RequestBody Cdt cdt) {
-        Map<String, Object> response = new HashMap<>();
-
-        Cdt cdtEncontrado = cdts.stream().filter(item -> item.getId().equals(id)).findAny().orElse(null);
-
-        if (cdtEncontrado == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Cdt no encontrado"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
-        }
-
-        if (cdt.getPlazoMeses() == 0 || cdt.getIdUser().equals(null) || cdt.getMonto() == 0) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Los campos son obligatorios"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-        }
-
-        if (!cdtEncontrado.getIdUser().equals(cdt.getIdUser())) {
-            Cdt cambioIdUser = cdts.stream()
-                    .filter(item -> item.getIdUser().equals(cdt.getIdUser())).findAny().orElse(null);
-
-            if (cambioIdUser != null) {
-                response = setApiResponse(new ApiResponse<>(false, "", "No se puede cambiar el id del usuario"));
-                return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        // Validar que la cuenta exista y esté activa
+        Account cuenta = null;
+        for (Account acc : accounts) {
+            if (acc.getId() != null && acc.getId().equals(cdt.getIdUser()) && acc.getIsActivated()) {
+                cuenta = acc;
+                break;
             }
         }
 
-        cdtEncontrado.setPlazoMeses(cdt.getPlazoMeses());
-        cdtEncontrado.setIdUser(cdt.getIdUser());
-        cdtEncontrado.setMonto(cdt.getMonto());
+        if (cuenta == null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "La cuenta no existe o está inactiva")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
 
-        response = setApiResponse(new ApiResponse<>(true, "", "Cdt actualizado"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        // Validar saldo suficiente
+        if (cuenta.getBalance() < cdt.getMonto()) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Saldo insuficiente en la cuenta")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
+
+        // Descontar el monto del CDT de la cuenta
+        cuenta.setBalance(cuenta.getBalance() - cdt.getMonto());
+        cdts.add(cdt);
+
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, cdts, "CDT creado exitosamente")), 
+            HttpStatus.CREATED
+        );
+    }
+
+    @PutMapping("/cdt/{id}")
+    public ResponseEntity<?> actualizarCdt(@PathVariable UUID id, @RequestBody Cdt cdt) {
+        Cdt cdtEncontrado = null;
+        for (Cdt c : cdts) {
+            if (c.getId() != null && c.getId().equals(id)) {
+                cdtEncontrado = c;
+                break;
+            }
+        }
+
+        if (cdtEncontrado == null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "CDT no encontrado")), 
+                HttpStatus.NOT_FOUND
+            );
+        }
+
+        if (cdt.getMonto() <= 0 || cdt.getPlazoMeses() <= 0) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Los datos son obligatorios y deben ser valores positivos")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
+
+        // No permitir cambios en el ID de usuario
+        if (cdtEncontrado.getIdUser() != cdt.getIdUser()) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se puede cambiar el usuario asociado al CDT")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
+
+        cdtEncontrado.setMonto(cdt.getMonto());
+        cdtEncontrado.setPlazoMeses(cdt.getPlazoMeses());
+
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, null, "CDT actualizado exitosamente")), 
+            HttpStatus.OK
+        );
     }
 
     @DeleteMapping("/cdt/{id}")
-    public ResponseEntity<?> deleteCdt() {
-        Map<String, Object> response = new HashMap<>();
+    public ResponseEntity<?> deleteCdt(@PathVariable UUID id) {
+        Cdt cdtEncontrado = null;
+        for (Cdt c : cdts) {
+            if (c.getId().equals(id)) {
+                cdtEncontrado = c;
+                break;
+            }
+        }
 
-        response = setApiResponse(
-                new ApiResponse<>(false, "", "No se puede eliminar el cdt por la politica de privacidad"));
-        return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        if (cdtEncontrado == null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "CDT no encontrado")), 
+                HttpStatus.NOT_FOUND
+            );
+        }
+
+        cdts.remove(cdtEncontrado);
+        
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, null, "CDT eliminado exitosamente")), 
+            HttpStatus.OK
+        );
     }
 
     /// TARJETA DE CREDITO ///
@@ -441,7 +579,7 @@ public class Controllers {
                 .orElse(null);
 
         if (tarejtaEncontrada == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontro la tarjeta de credito"));
+            response = setApiResponse(new ApiResponse<>(false, null, "No se encontró la tarjeta de credito"));
             return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
         }
 
@@ -449,117 +587,146 @@ public class Controllers {
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
-    @PostMapping("/tarjetaCredito")
+    @PostMapping("/tarjetas")
     public ResponseEntity<?> postTarjetaCredito(@RequestBody TarjetaCredito tarjeta) {
-        Map<String, Object> response = new HashMap<>();
-
-        if (tarjeta.getNombre().equals(null) || tarjeta.getNombre().isEmpty() || tarjeta.getApellido().equals(null)
-                || tarjeta.getApellido().isEmpty() || tarjeta.getEdad() == 0 || tarjeta.getIdUser().equals(null)) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Los datos son obligatorios"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        if (tarjeta.getNombre() == null || tarjeta.getNombre().trim().isEmpty() || 
+            tarjeta.getApellido() == null || tarjeta.getApellido().trim().isEmpty() || 
+            tarjeta.getEdad() <= 0 || tarjeta.getIdUser() == 0) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Los datos son obligatorios")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
         tarjetasCreditos.add(tarjeta);
-        response = setApiResponse(new ApiResponse<>(true, tarjetasCreditos, "Tarjeta de creadito agregada"));
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
-
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, tarjetasCreditos, "Tarjeta de crédito agregada")), 
+            HttpStatus.CREATED
+        );
     }
 
-    @PutMapping("/tarjetaCredito/{id}")
-    public ResponseEntity<?> putTarjeta(@RequestBody TarjetaCredito tarjeta, @PathVariable UUID id) {
-        Map<String, Object> response = new HashMap<>();
-
-        TarjetaCredito tarejtaEncontrada = tarjetasCreditos.stream().filter(item -> item.getId().equals(id)).findAny()
-                .orElse(null);
-
-        if (tarejtaEncontrada == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontro la tarjeta de credito"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
-        }
-
-        if (tarjeta.getNombre().equals(null) || tarjeta.getNombre().isEmpty() || tarjeta.getApellido().equals(null)
-                || tarjeta.getApellido().isEmpty() || tarjeta.getEdad() == 0 || tarjeta.getIdUser().equals(null)) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Los datos son obligatorios"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-        }
-
-        if (!tarejtaEncontrada.getIdUser().equals(tarejtaEncontrada.getIdUser())) {
-            TarjetaCredito cambioTarjeta = tarjetasCreditos.stream()
-                    .filter(item -> item.getIdUser().equals(tarejtaEncontrada.getIdUser())).findAny().orElse(null);
-
-            if (cambioTarjeta != null) {
-                response = setApiResponse(new ApiResponse<>(false, "", "No se puede cambiar el id del usuario"));
-                return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+    @PutMapping("/tarjetas/{id}")
+    public ResponseEntity<?> putTarjetaCredito(@PathVariable UUID id, @RequestBody TarjetaCredito tarjeta) {
+        TarjetaCredito tarjetaEncontrada = null;
+        for (TarjetaCredito t : tarjetasCreditos) {
+            if (t.getId() != null && t.getId().equals(id)) {
+                tarjetaEncontrada = t;
+                break;
             }
         }
 
-        tarejtaEncontrada.setApellido(tarjeta.getApellido());
-        tarejtaEncontrada.setNombre(tarjeta.getNombre());
-        tarejtaEncontrada.setEdad(tarjeta.getEdad());
+        if (tarjetaEncontrada == null) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se encontró la tarjeta de crédito")), 
+                HttpStatus.NOT_FOUND
+            );
+        }
 
-        response = setApiResponse(new ApiResponse<>(true, "", "Tarjeta de credito actualizada"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        if (tarjeta.getNombre() == null || tarjeta.getNombre().trim().isEmpty() || 
+            tarjeta.getApellido() == null || tarjeta.getApellido().trim().isEmpty() || 
+            tarjeta.getEdad() <= 0) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "Los datos son obligatorios")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
+
+        // Validar que no se cambie el ID del usuario
+        if (tarjetaEncontrada.getIdUser() != tarjeta.getIdUser()) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se puede cambiar el id del usuario")), 
+                HttpStatus.BAD_REQUEST
+            );
+        }
+
+        tarjetaEncontrada.setNombre(tarjeta.getNombre());
+        tarjetaEncontrada.setApellido(tarjeta.getApellido());
+        tarjetaEncontrada.setEdad(tarjeta.getEdad());
+        
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, null, "Tarjeta de crédito actualizada")), 
+            HttpStatus.OK
+        );
     }
 
     @DeleteMapping("/tarjetaCredito/{id}")
-    public ResponseEntity<?> deleteTarjeta(@PathVariable UUID id) {
-        Map<String, Object> response = new HashMap<>();
-
-        TarjetaCredito tarejtaEncontrada = tarjetasCreditos.stream().filter(item -> item.getId().equals(id)).findAny()
-                .orElse(null);
+    public ResponseEntity<?> deleteTarjetaCredito(@PathVariable UUID id) {
+        TarjetaCredito tarejtaEncontrada = null;
+        for (TarjetaCredito t : tarjetasCreditos) {
+            if (t.getId().equals(id)) {
+                tarejtaEncontrada = t;
+                break;
+            }
+        }
 
         if (tarejtaEncontrada == null) {
-            response = setApiResponse(new ApiResponse<>(false, "", "No se encontro la tarjeta de credito"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "No se encontró la tarjeta de credito")), 
+                HttpStatus.NOT_FOUND
+            );
         }
 
         tarjetasCreditos.remove(tarejtaEncontrada);
-        response = setApiResponse(new ApiResponse<>(true, "", "Tarjeta de credito eliminada"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, null, "Tarjeta de credito eliminada exitosamente")), 
+            HttpStatus.OK
+        );
     }
 
     /// SIMULAR CDT ///
 
     @PostMapping("/cdt/simular")
     public ResponseEntity<?> simularCdt(@RequestBody Cdt cdt) {
-        Map<String, Object> response = new HashMap<>();
-
-        String message = "";
-        double meses3 = (cdt.getMonto() * 0.63) / 4;
-        double meses6 = (cdt.getMonto() * 0.85) / 4;
-        double meses9 = (cdt.getMonto() * 0.113) / 4;
-        double meses12 = (cdt.getMonto() * 0.149) / 4;
-
-        if (cdt.getPlazoMeses() == 0 || cdt.getIdUser().equals(null) || cdt.getMonto() == 0) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Todos los campos son obligatorios"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        if (cdt.getMonto() <= 0 || cdt.getPlazoMeses() <= 0) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "El monto y el plazo deben ser valores positivos")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        if (cdt.getPlazoMeses() != 3 && cdt.getPlazoMeses() != 6 && cdt.getPlazoMeses() != 9
-                && cdt.getPlazoMeses() != 12) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Solo se pueden plazos de , 6, 9 y 12 meses"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
+        // Validar que el plazo sea válido (3, 6, 9 o 12 meses)
+        int plazo = cdt.getPlazoMeses();
+        if (plazo != 3 && plazo != 6 && plazo != 9 && plazo != 12) {
+            return new ResponseEntity<>(
+                setApiResponse(new ApiResponse<>(false, null, "El plazo debe ser de 3, 6, 9 o 12 meses")), 
+                HttpStatus.BAD_REQUEST
+            );
         }
 
-        if (cdt.getPlazoMeses() == 3) {
-            message = "La tasa de interes anual a 3 meses es de " + meses3 / 0.4;
+        // Calcular la tasa de interés según el plazo
+        double tasaInteres;
+        switch (plazo) {
+            case 3:
+                tasaInteres = 0.05;
+                break;
+            case 6:
+                tasaInteres = 0.06;
+                break;
+            case 9:
+                tasaInteres = 0.07;
+                break;
+            case 12:
+                tasaInteres = 0.08;
+                break;
+            default:
+                tasaInteres = 0.0;
         }
 
-        if (cdt.getPlazoMeses() == 6) {
-            message = "La tasa de interes anual a 6 meses es de " + meses6 / 4;
-        }
+        // Calcular el interés y el monto final
+        double interes = cdt.getMonto() * tasaInteres * (plazo / 12.0);
+        double montoFinal = cdt.getMonto() + interes;
 
-        if (cdt.getPlazoMeses() == 9) {
-            message = "La tasa de interes anual a 9 meses es de " + meses9 / 4;
-        }
+        Map<String, Double> simulacion = new HashMap<>();
+        simulacion.put("montoInicial", cdt.getMonto());
+        simulacion.put("tasaInteres", tasaInteres);
+        simulacion.put("interes", interes);
+        simulacion.put("montoFinal", montoFinal);
 
-        if (cdt.getPlazoMeses() == 12) {
-            message = "La tasa de interes anual a 12 meses es de " + meses12 / 4;
-        }
-
-        response = setApiResponse(new ApiResponse<>(true, "", message));
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
-
+        return new ResponseEntity<>(
+            setApiResponse(new ApiResponse<>(true, simulacion, "Simulación calculada exitosamente")), 
+            HttpStatus.OK
+        );
     }
 
     /// MONTO TOTAL DE LAS CUENTAS DE AHORRO ///
@@ -598,47 +765,5 @@ public class Controllers {
         response = setApiResponse(new ApiResponse<>(true, gananciatotal, "Ganancias totales del cdt"));
         return new ResponseEntity<>(response, HttpStatus.OK);
     }
-
-    // TRANSFERENCIAS ///
-
-    @PostMapping("/transfers")
-    public ResponseEntity<?> transferMoney(@RequestBody Transfer transfer) {
-        Map<String, Object> response = new HashMap<>();
-
-        Account originAccount = accounts.stream().filter(item -> item.getId().equals(transfer.getOriginAccount()))
-                .findAny().orElse(null);
-
-        if (originAccount == null || originAccount.getIsActivated() == false) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Cuenta bancaria de origen no encontrada"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
-        }
-
-        Account destinationAccount = accounts.stream()
-                .filter(item -> item.getId().equals(transfer.getDestinationAccount())).findAny().orElse(null);
-
-        if (destinationAccount == null || destinationAccount.getIsActivated() == false) {
-            response = setApiResponse(new ApiResponse<>(false, "", "Cuenta bancaria de destino no encontrada"));
-            return new ResponseEntity<>(response, HttpStatus.NOT_FOUND);
-        }
-
-        if (originAccount.getBalance() < transfer.getAmount()) {
-            response = setApiResponse(
-                    new ApiResponse<>(false, "", "No tiene saldo sufienciente para realizar la transferencia"));
-            return new ResponseEntity<>(response, HttpStatus.BAD_REQUEST);
-        }
-
-        originAccount.setBalance(originAccount.getBalance() - transfer.getAmount());
-
-        destinationAccount.setBalance(destinationAccount.getBalance() + transfer.getAmount());
-
-        transfers.add(transfer);
-        response = setApiResponse(new ApiResponse<>(true, transfer, "Transferencia bancaria realizada con éxito"));
-        return new ResponseEntity<>(response, HttpStatus.OK);
-
-    }
-
-
-
-    
 
 }

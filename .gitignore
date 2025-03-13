@@ -31,3 +31,48 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Java ###
+*.class
+*.log
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+### Maven ###
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+
+### Application Properties ###
+src/main/resources/application-*.properties
+!src/main/resources/application.properties
+
+### Logs ###
+logs/
+*.log
+*.log.*
+
+### Database ###
+*.db
+*.sqlite
+*.h2.db
+*.trace.db
+
+### OS Generated Files ###
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
