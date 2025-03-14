@@ -1,20 +1,17 @@
 package finalCDT.finalCDT.repositories;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
+import finalCDT.finalCDT.entitys.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import finalCDT.finalCDT.entitys.User;
+import java.util.List;
+import java.util.Optional;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, UUID> {
-    boolean existsByEmail(String email);
-    boolean existsByCc(String cc);
+public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     Optional<User> findByCc(String cc);
+    boolean existsByEmail(String email);
+    boolean existsByCc(String cc);
     List<User> findByIsActivatedTrue();
-    Optional<User> findByIdAndIsActivatedTrue(UUID id);
 }

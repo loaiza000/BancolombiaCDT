@@ -1,42 +1,38 @@
 package finalCDT.finalCDT.entitys;
 
-import java.util.UUID;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Entity
-@AllArgsConstructor
-@NoArgsConstructor
-@Table(name = "cuentas")
-@Data
-public class Account {
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
+@Entity
+@Data
+@NoArgsConstructor
+@Table(name = "accounts")
+public class Account {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "numero", nullable = false, unique = true)
-    private String number;
+    @Column(unique = true, nullable = false)
+    private String accountNumber;
 
-    @Column(name = "tipo", nullable = false, unique = true)
-    private String type;
+    @Column(nullable = false)
+    private BigDecimal balance;
 
-    @Column(name = "tipo", nullable = false, unique = true)
-    private UUID idUser;
+    @Column(nullable = false)
+    private boolean active;
 
-    @Column(name = "tipo", nullable = false, unique = true)
-    private Double balance;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-    @Column(name = "tipo", nullable = false, unique = true)
-    private Boolean isActivated;
+    @OneToMany(mappedBy = "sourceAccount", cascade = CascadeType.ALL)
+    private List<Transfer> outgoingTransfers = new ArrayList<>();
 
-
+    @OneToMany(mappedBy = "targetAccount", cascade = CascadeType.ALL)
+    private List<Transfer> incomingTransfers = new ArrayList<>();
 }

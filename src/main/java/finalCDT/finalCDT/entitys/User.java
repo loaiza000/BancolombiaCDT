@@ -1,57 +1,44 @@
 package finalCDT.finalCDT.entitys;
 
-import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
-
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
-
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Data
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 @Entity
+@Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table(name = "usuarios")
+@Table(name = "users")
 public class User {
-
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    @NotBlank(message = "El nombre es obligatorio")
-    @Size(min = 2, max = 50, message = "El nombre debe tener entre 2 y 50 caracteres")
-    @Column(name = "nombre", nullable = false)
-    private String name; 
+    @Column(nullable = false)
+    private String name;
 
-    @NotBlank(message = "El apellido es obligatorio")
-    @Size(min = 2, max = 50, message = "El apellido debe tener entre 2 y 50 caracteres")
-    @Column(name = "apellido", nullable = false)
-    private String lastname;
-
-    @NotBlank(message = "El email es obligatorio")
-    @Email(message = "El formato del email no es válido")
-    @Column(nullable = false, unique = true)
+    @Column(unique = true, nullable = false)
     private String email;
-
-    @NotBlank(message = "La cédula es obligatoria")
-    @Pattern(regexp = "^[0-9]{8,12}$", message = "La cédula debe contener entre 8 y 12 dígitos")
-    @Column(name = "cedula", nullable = false, unique = true)
-    private String cc;
 
     @Column(nullable = false)
     private String password;
+
+    @Column(unique = true, nullable = false)
+    private String cc;
+
+    private String phone;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private boolean isActivated = true;
 
     @Builder.Default
     @ElementCollection(fetch = FetchType.EAGER)
@@ -60,17 +47,14 @@ public class User {
     private Set<String> roles = new HashSet<>();
 
     @Builder.Default
-    @Column(name = "activo", nullable = false)
-    private Boolean isActivated = true;
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    private List<Account> accounts = new ArrayList<>();
 
-    @CreationTimestamp
-    @Column(name = "fecha_creacion", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    public boolean getIsActivated() {
+        return isActivated;
+    }
 
-    @UpdateTimestamp
-    @Column(name = "fecha_actualizacion")
-    private LocalDateTime updatedAt;
-
-    @Version
-    private Long version;
+    public void setIsActivated(boolean isActivated) {
+        this.isActivated = isActivated;
+    }
 }
